@@ -172,11 +172,27 @@
   }
   .togglebool button.active { background: var(--accent-dim); color: #cfe0ff; border-color: var(--accent); }
 
+  .filterbar {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .filterbar h2 {
+    margin: 0; font-size: 12px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+
   .tablewrap {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 14px;
-    overflow: hidden;
+  }
+  .tablescroll {
+    border-radius: 0 0 14px 14px;
   }
   .tablehead-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 12px; gap: 12px; flex-wrap: wrap; }
   .tablehead-row h2 {
@@ -187,11 +203,11 @@
   .filter-group { display: flex; align-items: center; gap: 6px; }
 
   .scrollx {
-    overflow-x: auto;
+    overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--accent-dim) var(--panel-2);
   }
-  .scrollx::-webkit-scrollbar { height: 10px; }
+  .scrollx::-webkit-scrollbar { height: 10px; width: 10px; }
   .scrollx::-webkit-scrollbar-track { background: var(--panel-2); }
   .scrollx::-webkit-scrollbar-thumb {
     background: var(--accent-dim);
@@ -199,6 +215,66 @@
     border: 2px solid var(--panel-2);
   }
   .scrollx::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  .tablescroll { max-height: 52vh; }
+  .tablescroll thead th {
+    position: sticky; top: 0; z-index: 6;
+    background: var(--panel);
+  }
+  .tablescroll thead tr.group-row th { background: var(--panel); }
+  .tablescroll tfoot td {
+    position: sticky; bottom: 0; z-index: 6;
+  }
+
+  .aggregate-section { display: flex; flex-direction: column; gap: 10px; }
+  .filter-summary { font-size: 12.5px; color: var(--muted); }
+  .filter-summary .chip {
+    display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+    color: var(--text); background: var(--panel-2); margin-left: 6px;
+  }
+
+  .aggregate-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 26px;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .agg-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .agg-title-group { display: flex; flex-direction: column; gap: 2px; }
+  .agg-title { display: flex; align-items: baseline; gap: 8px; }
+  .agg-title .name { font-size: 16px; font-weight: 700; }
+  .agg-title .sub { font-size: 12px; color: var(--muted); }
+  .agg-headline { font-size: 26px; font-weight: 750; letter-spacing: -0.01em; }
+  .agg-period-pill {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 5px 14px;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .agg-body { display: flex; gap: 22px; align-items: flex-start; }
+  .agg-bars { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .agg-bar-row { position: relative; height: 10px; }
+  .agg-bar-track { position: absolute; inset: 0; }
+  .agg-bar-fill {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    height: 100%; border-radius: 999px; background: var(--accent);
+    display: flex; overflow: hidden;
+  }
+  .agg-bar-fill.base { left: 0; transform: none; }
+  .agg-bar-fill > span:first-child { background: var(--accent); }
+  .agg-bar-fill > span:last-child { background: var(--accent-dim); }
+  .agg-stats { display: flex; flex-direction: column; gap: 16px; flex: none; text-align: right; }
+  .agg-stats .stat-row { display: flex; flex-direction: column; }
+  .agg-stats .stat-val { font-weight: 700; font-size: 13.5px; }
+  .agg-stats .stat-label { font-size: 12px; color: var(--muted); }
+  .agg-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .agg-legend .ldot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+  .agg-empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
 
   .columns-dropdown { position: relative; }
   .columns-panel {
@@ -344,79 +420,88 @@
 
   <div class="pending" id="pending"></div>
 
-  <div class="tablewrap">
-    <div class="tablehead-row">
-      <h2>Comparison</h2>
-      <div class="filter-row">
-        <div class="filter-group">
-          breakdown:
-          <select id="filterBreakdown">
-            <option value="all">All entries</option>
-            <option value="with">With breakdown data</option>
-            <option value="without">Without breakdown data</option>
-          </select>
+  <div class="filterbar">
+    <h2>Filters</h2>
+    <div class="filter-row">
+      <div class="filter-group">
+        breakdown:
+        <select id="filterBreakdown">
+          <option value="all">All entries</option>
+          <option value="with">With breakdown data</option>
+          <option value="without">Without breakdown data</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        location:
+        <select id="filterCountry">
+          <option value="all">All locations</option>
+        </select>
+      </div>
+      <div class="filter-group columns-dropdown">
+        <button class="linkbtn" id="moreFiltersBtn">more filters ▾</button>
+        <div class="columns-panel" id="moreFiltersPanel" style="display:none; min-width:210px;">
+          <label class="stacked">Top Rated
+            <select id="filterTopRated">
+              <option value="all">All</option>
+              <option value="yes">Top Rated only</option>
+              <option value="no">Not Top Rated</option>
+            </select>
+          </label>
+          <label class="stacked">Top Rated Plus
+            <select id="filterTopRatedPlus">
+              <option value="all">All</option>
+              <option value="yes">Top Rated Plus only</option>
+              <option value="no">Not Top Rated Plus</option>
+            </select>
+          </label>
+          <label class="stacked">Expert-Vetted
+            <select id="filterExpertVetted">
+              <option value="all">All</option>
+              <option value="yes">Expert-Vetted only</option>
+              <option value="no">Not Expert-Vetted</option>
+            </select>
+          </label>
+          <label class="stacked">Earnings (12mo)
+            <select id="filterEarnings">
+              <option value="all">All</option>
+              <option value="lt10k">Under $10k</option>
+              <option value="10k-50k">$10k – $50k</option>
+              <option value="50k-100k">$50k – $100k</option>
+              <option value="100kplus">$100k+</option>
+            </select>
+          </label>
+          <label class="stacked">Job Success Score
+            <select id="filterJobSuccess">
+              <option value="all">All</option>
+              <option value="90plus">90% or higher</option>
+              <option value="100">100% only</option>
+            </select>
+          </label>
         </div>
-        <div class="filter-group">
-          location:
-          <select id="filterCountry">
-            <option value="all">All locations</option>
-          </select>
-        </div>
-        <div class="filter-group columns-dropdown">
-          <button class="linkbtn" id="moreFiltersBtn">more filters ▾</button>
-          <div class="columns-panel" id="moreFiltersPanel" style="display:none; min-width:210px;">
-            <label class="stacked">Top Rated
-              <select id="filterTopRated">
-                <option value="all">All</option>
-                <option value="yes">Top Rated only</option>
-                <option value="no">Not Top Rated</option>
-              </select>
-            </label>
-            <label class="stacked">Top Rated Plus
-              <select id="filterTopRatedPlus">
-                <option value="all">All</option>
-                <option value="yes">Top Rated Plus only</option>
-                <option value="no">Not Top Rated Plus</option>
-              </select>
-            </label>
-            <label class="stacked">Expert-Vetted
-              <select id="filterExpertVetted">
-                <option value="all">All</option>
-                <option value="yes">Expert-Vetted only</option>
-                <option value="no">Not Expert-Vetted</option>
-              </select>
-            </label>
-            <label class="stacked">Earnings (12mo)
-              <select id="filterEarnings">
-                <option value="all">All</option>
-                <option value="lt10k">Under $10k</option>
-                <option value="10k-50k">$10k – $50k</option>
-                <option value="50k-100k">$50k – $100k</option>
-                <option value="100kplus">$100k+</option>
-              </select>
-            </label>
-            <label class="stacked">Job Success Score
-              <select id="filterJobSuccess">
-                <option value="all">All</option>
-                <option value="90plus">90% or higher</option>
-                <option value="100">100% only</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div class="filter-group columns-dropdown">
-          <button class="linkbtn" id="columnsToggleBtn">columns ▾</button>
-          <div class="columns-panel" id="columnsPanel" style="display:none;">
-            <label><input type="checkbox" data-col="pctBase"> % of base</label>
-            <label><input type="checkbox" data-col="conversion"> Conversion (prior stage)</label>
-            <label><input type="checkbox" data-col="breakdown"> Traffic breakdown</label>
-            <label><input type="checkbox" data-col="profile"> Profile metrics</label>
-            <label><input type="checkbox" data-col="status"> Account status</label>
-          </div>
+      </div>
+      <div class="filter-group columns-dropdown">
+        <button class="linkbtn" id="columnsToggleBtn">columns ▾</button>
+        <div class="columns-panel" id="columnsPanel" style="display:none;">
+          <label><input type="checkbox" data-col="pctBase"> % of base</label>
+          <label><input type="checkbox" data-col="conversion"> Conversion (prior stage)</label>
+          <label><input type="checkbox" data-col="breakdown"> Traffic breakdown</label>
+          <label><input type="checkbox" data-col="profile"> Profile metrics</label>
+          <label><input type="checkbox" data-col="status"> Account status</label>
         </div>
       </div>
     </div>
-    <div class="scrollx">
+  </div>
+
+  <div class="aggregate-section" id="aggregateSection" style="display:none;">
+    <div class="filter-summary" id="filterSummary"></div>
+    <div class="aggregate-card" id="aggregateCard"></div>
+  </div>
+
+  <div class="tablewrap">
+    <div class="tablehead-row">
+      <h2>All entries</h2>
+    </div>
+    <div class="scrollx tablescroll">
       <table id="compTable">
         <thead>
           <tr class="group-row" id="theadGroupRow"></tr>
@@ -920,6 +1005,104 @@ function avg(vals) {
   return clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
 }
 
+function renderAggregateCard(rows, totalCount, activeFilters) {
+  const section = document.getElementById('aggregateSection');
+  const summaryEl = document.getElementById('filterSummary');
+  const cardEl = document.getElementById('aggregateCard');
+  section.style.display = '';
+
+  summaryEl.innerHTML = `Averages for <strong>${rows.length}</strong> of ${totalCount} total entr${rows.length === 1 ? 'y' : 'ies'}` +
+    (activeFilters.length
+      ? activeFilters.map(f => `<span class="chip">${escapeHtml(f.label)}: ${escapeHtml(f.value)}</span>`).join('')
+      : `<span class="chip">no filters applied</span>`);
+
+  const funnelRows = rows.filter(r => r.stages.length);
+  if (!funnelRows.length) {
+    cardEl.innerHTML = `<div class="agg-empty">No funnel data in the current selection.</div>`;
+    return;
+  }
+
+  const periodCounts = {};
+  funnelRows.forEach(r => { periodCounts[r.funnelPeriod] = (periodCounts[r.funnelPeriod] || 0) + 1; });
+  const dominantPeriod = Object.entries(periodCounts).sort((a, b) => b[1] - a[1])[0][0];
+  const dominantRows = funnelRows.filter(r => r.funnelPeriod === dominantPeriod);
+  const excludedCount = funnelRows.length - dominantRows.length;
+
+  const stageOrder = [];
+  dominantRows.forEach(r => r.stages.forEach(s => { if (!stageOrder.includes(s.label)) stageOrder.push(s.label); }));
+  const stageAverages = stageOrder.map(label => ({
+    label,
+    avg: avg(dominantRows.map(r => r.stages.find(s => s.label === label)?.value))
+  })).filter(s => s.avg !== null);
+
+  const breakdownRows = dominantRows.filter(r => r.breakdown.length);
+  const breakdownOrder = [];
+  breakdownRows.forEach(r => r.breakdown.forEach(b => { if (!breakdownOrder.includes(b.label)) breakdownOrder.push(b.label); }));
+  const breakdownAverages = breakdownOrder.map(label => ({
+    label,
+    avg: avg(breakdownRows.map(r => r.breakdown.find(b => b.label === label)?.percent))
+  })).filter(b => b.avg !== null);
+  // normalize so segments sum to 100
+  const bdTotal = breakdownAverages.reduce((a, b) => a + b.avg, 0);
+  if (bdTotal > 0) breakdownAverages.forEach(b => { b.pct = (b.avg / bdTotal) * 100; });
+
+  if (!stageAverages.length) {
+    cardEl.innerHTML = `<div class="agg-empty">No funnel data in the current selection.</div>`;
+    return;
+  }
+
+  const baseAvg = stageAverages[0].avg;
+  const bdColors = ['var(--accent)', 'var(--accent-dim)', '#8fb3ea', '#3a5a99'];
+
+  const barsHtml = stageAverages.map((s, i) => {
+    const pct = baseAvg ? Math.min(100, (s.avg / baseAvg) * 100) : 0;
+    let fillInner = '';
+    if (i === 0 && breakdownAverages.length) {
+      fillInner = breakdownAverages.map((b, bi) =>
+        `<span style="width:${b.pct}%; background:${bdColors[bi % bdColors.length]};"></span>`
+      ).join('');
+    }
+    return `
+      <div class="agg-bar-row">
+        <div class="agg-bar-track"></div>
+        <div class="agg-bar-fill${i === 0 ? ' base' : ''}" style="width:${pct}%; ${i === 0 && breakdownAverages.length ? '' : 'background:var(--accent);'}">${fillInner}</div>
+      </div>`;
+  }).join('');
+
+  const statsHtml = stageAverages.map(s => `
+    <div class="stat-row">
+      <span class="stat-val">${s.avg.toFixed(1)}</span>
+      <span class="stat-label">${escapeHtml(s.label)}</span>
+    </div>
+  `).join('');
+
+  const legendHtml = breakdownAverages.length
+    ? `<div class="agg-legend">${breakdownAverages.map((b, bi) =>
+        `<span><span class="ldot" style="background:${bdColors[bi % bdColors.length]};"></span>${escapeHtml(b.label)} (${b.pct.toFixed(0)}%)</span>`
+      ).join('')}</div>`
+    : '';
+
+  const periodNote = excludedCount
+    ? `<div class="agg-empty" style="font-size:11.5px;">${excludedCount} of ${funnelRows.length} filtered entr${excludedCount === 1 ? 'y uses' : 'ies use'} a different period and ${excludedCount === 1 ? "isn't" : "aren't"} included above.</div>`
+    : '';
+
+  cardEl.innerHTML = `
+    <div class="agg-top">
+      <div class="agg-title-group">
+        <div class="agg-title"><span class="name">Proposals</span><span class="sub">average of ${dominantRows.length}</span></div>
+        <div class="agg-headline">${stageAverages[0].avg.toFixed(1)} ${escapeHtml(stageAverages[0].label.toLowerCase())} (avg)</div>
+      </div>
+      <span class="agg-period-pill">${escapeHtml(dominantPeriod || 'period n/a')}</span>
+    </div>
+    <div class="agg-body">
+      <div class="agg-bars">${barsHtml}</div>
+      <div class="agg-stats">${statsHtml}</div>
+    </div>
+    ${legendHtml}
+    ${periodNote}
+  `;
+}
+
 function renderTable() {
   updateCountryFilterOptions();
 
@@ -966,11 +1149,22 @@ function renderTable() {
     return true;
   });
 
+  const activeFilters = [
+    bMode !== 'all' ? { label: 'Breakdown', value: bMode === 'with' ? 'has data' : 'no data' } : null,
+    cMode !== 'all' ? { label: 'Location', value: cMode } : null,
+    trMode !== 'all' ? { label: 'Top Rated', value: trMode === 'yes' ? 'yes' : 'no' } : null,
+    trpMode !== 'all' ? { label: 'Top Rated Plus', value: trpMode === 'yes' ? 'yes' : 'no' } : null,
+    evMode !== 'all' ? { label: 'Expert-Vetted', value: evMode === 'yes' ? 'yes' : 'no' } : null,
+    earnMode !== 'all' ? { label: 'Earnings', value: earnMode.replace('kplus', 'k+').replace('lt', '<').replace('k-', 'k–') } : null,
+    jsMode !== 'all' ? { label: 'Job Success', value: jsMode === '100' ? '100%' : '90%+' } : null,
+  ].filter(Boolean);
+
   document.getElementById('compTable').style.display = entries.length ? '' : 'none';
   emptyMsg.style.display = entries.length ? 'none' : '';
   if (!entries.length) {
     emptyMsg.textContent = 'No entries yet — add a screenshot above.';
     theadGroup.innerHTML = ''; thead.innerHTML = '<th>Card</th>'; tbody.innerHTML = ''; tfoot.innerHTML = '';
+    document.getElementById('aggregateSection').style.display = 'none';
     return;
   }
   if (!rows.length) {
@@ -978,8 +1172,11 @@ function renderTable() {
     thead.innerHTML = '<th>Card</th>';
     tbody.innerHTML = `<tr><td style="padding:20px 14px; color:var(--muted);">No entries match the current filters.</td></tr>`;
     tfoot.innerHTML = '';
+    document.getElementById('aggregateSection').style.display = 'none';
     return;
   }
+
+  renderAggregateCard(rows, entries.length, activeFilters);
 
   // column keys are period-qualified so e.g. "2026" and "Last 30 days" never mix
   const stageKeys = []; // {key,label,period}
