@@ -139,17 +139,30 @@ function rowToEntry(row) {
   };
 }
 
+const MAX_ROWS = 1000;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const { pathname } = url;
 
     if (pathname === '/api/status' && request.method === 'GET') {
-      return json({ openai: !!env.OPENAI_API_KEY, openrouter: !!env.OPENROUTER_KEY });
+      const countRow = await env.DB.prepare('SELECT COUNT(*) AS c FROM entries').first();
+      return json({
+        openai: !!env.OPENAI_API_KEY,
+        openrouter: !!env.OPENROUTER_KEY,
+        rowCount: countRow.c,
+        maxRows: MAX_ROWS,
+        full: countRow.c >= MAX_ROWS,
+      });
     }
 
     if (pathname === '/api/extract' && request.method === 'POST') {
       try {
+        const countRow = await env.DB.prepare('SELECT COUNT(*) AS c FROM entries').first();
+        if (countRow.c >= MAX_ROWS) {
+          return json({ ok: false, error: `This tool has reached its ${MAX_ROWS}-entry limit, so it's no longer processing new screenshots.` }, 429);
+        }
         const { image, provider } = await request.json();
         let text;
         if (provider === 'openrouter') {
@@ -177,6 +190,15 @@ export default {
       const body = await request.json();
       const ownerId = body.ownerId;
       if (!ownerId) return json({ ok: false, error: 'Missing ownerId' }, 400);
+
+      const existing = await env.DB.prepare('SELECT id FROM entries WHERE owner_id = ?').bind(ownerId).first();
+      if (!existing) {
+        const countRow = await env.DB.prepare('SELECT COUNT(*) AS c FROM entries').first();
+        if (countRow.c >= MAX_ROWS) {
+          return json({ ok: false, error: `This tool has reached its ${MAX_ROWS}-entry limit and isn't accepting new rows.` }, 429);
+        }
+      }
+
       const id = crypto.randomUUID();
       const createdAt = Date.now();
       // one row per owner: replace any existing row from this browser

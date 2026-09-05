@@ -59,13 +59,6 @@
   .dot.on { background: var(--good); }
   .dot.warn { background: var(--warn); }
 
-  .provider-row {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    font-size: 12px;
-    color: var(--muted);
-  }
   select {
     background: var(--panel-2);
     color: var(--text);
@@ -92,6 +85,11 @@
     border-color: var(--accent);
     background: var(--panel-2);
   }
+  .dropzone.disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+  .dropzone.disabled:hover { border-color: var(--border); background: var(--panel); }
   .dropzone .big { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
   .dropzone .small { font-size: 12.5px; color: var(--muted); }
   input[type=file] { display: none; }
@@ -326,17 +324,13 @@
         <span class="dot" id="statusDot"></span>
         <span id="statusText">checking API keys…</span>
       </div>
-      <span class="provider-row">
-        provider:
-        <select id="providerSelect">
-          <option value="openai">OpenAI</option>
-          <option value="openrouter">OpenRouter</option>
-        </select>
-      </span>
       <div class="status-item">
         <span class="dot" id="geoDot"></span>
         <span id="geoText">location not detected</span>
         <button class="linkbtn" id="geoRetry">detect / retry</button>
+      </div>
+      <div class="status-item">
+        <span id="capacityText"></span>
       </div>
     </div>
   </header>
@@ -346,6 +340,7 @@
     <div class="small">You can also paste an image (Ctrl/Cmd+V) anywhere on the page</div>
     <input type="file" id="fileInput" accept="image/*" multiple>
   </div>
+  <div class="empty" id="capacityNotice" style="display:none;"></div>
 
   <div class="pending" id="pending"></div>
 
@@ -441,7 +436,8 @@ const fileInput = document.getElementById('fileInput');
 const pendingEl = document.getElementById('pending');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
-const providerSelect = document.getElementById('providerSelect');
+const capacityText = document.getElementById('capacityText');
+const capacityNotice = document.getElementById('capacityNotice');
 const geoDot = document.getElementById('geoDot');
 const geoText = document.getElementById('geoText');
 const geoRetry = document.getElementById('geoRetry');
@@ -525,13 +521,20 @@ const filterJobSuccess = document.getElementById('filterJobSuccess');
   sel.addEventListener('change', renderTable);
 });
 
+let atCapacity = false;
+
 fetch('/api/status').then(r => r.json()).then(s => {
-  const ok = s.openai || s.openrouter;
-  statusDot.classList.toggle('on', ok);
-  if (s.openai && s.openrouter) statusText.textContent = 'OpenAI + OpenRouter keys loaded';
-  else if (s.openai) statusText.textContent = 'OpenAI key loaded';
-  else if (s.openrouter) { statusText.textContent = 'OpenRouter key loaded'; providerSelect.value = 'openrouter'; }
-  else statusText.textContent = 'No API key configured (wrangler secret put OPENAI_API_KEY)';
+  statusDot.classList.toggle('on', !!s.openai);
+  statusText.textContent = s.openai ? 'OpenAI key loaded' : 'No API key configured (wrangler secret put OPENAI_API_KEY)';
+  if (typeof s.rowCount === 'number' && typeof s.maxRows === 'number') {
+    capacityText.textContent = `${s.rowCount} / ${s.maxRows} entries`;
+    atCapacity = !!s.full;
+    if (atCapacity) {
+      dropzone.classList.add('disabled');
+      capacityNotice.style.display = '';
+      capacityNotice.textContent = `This tool has reached its ${s.maxRows}-entry limit, so it's no longer processing new screenshots. Existing entries are still viewable and comparable.`;
+    }
+  }
 }).catch(() => { statusText.textContent = 'Server not reachable'; });
 
 async function loadEntries() {
@@ -612,6 +615,10 @@ window.addEventListener('paste', e => {
 });
 
 function handleFiles(fileList) {
+  if (atCapacity) {
+    alert(`This tool has reached its entry limit and isn't processing new screenshots right now.`);
+    return;
+  }
   [...fileList].forEach(file => {
     const reader = new FileReader();
     reader.onload = () => addPending(reader.result);
@@ -643,7 +650,7 @@ async function runExtraction(card) {
     const res = await fetch('/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: card.dataUrl, provider: providerSelect.value })
+      body: JSON.stringify({ image: card.dataUrl, provider: 'openai' })
     });
     const json = await res.json();
     if (!res.ok || !json.ok) throw new Error(json.error || 'extraction failed');
