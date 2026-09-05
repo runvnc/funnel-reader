@@ -244,28 +244,29 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 22px 26px;
-    max-width: 560px;
+    padding: 28px 32px;
+    max-width: 640px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 26px;
   }
   .agg-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .agg-title-group { display: flex; flex-direction: column; gap: 2px; }
+  .agg-title-group { display: flex; flex-direction: column; gap: 4px; }
   .agg-title { display: flex; align-items: baseline; gap: 8px; }
-  .agg-title .name { font-size: 16px; font-weight: 700; }
-  .agg-title .sub { font-size: 12px; color: var(--muted); }
-  .agg-headline { font-size: 26px; font-weight: 750; letter-spacing: -0.01em; }
+  .agg-title .name { font-size: 20px; font-weight: 700; }
+  .agg-title .sub { font-size: 13px; color: var(--muted); }
+  .agg-headline { font-size: 30px; font-weight: 750; letter-spacing: -0.01em; }
   .agg-period-pill {
-    font-size: 12px; font-weight: 600; color: var(--text);
+    font-size: 13px; font-weight: 600; color: var(--text);
     background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 999px; padding: 5px 14px;
+    border-radius: 999px; padding: 6px 16px;
     display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   }
-  .agg-body { display: flex; gap: 22px; align-items: flex-start; }
-  .agg-bars { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-  .agg-bar-row { position: relative; height: 10px; }
-  .agg-bar-track { position: absolute; inset: 0; }
+  .agg-body { display: flex; gap: 28px; align-items: center; }
+  .agg-bars { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .agg-bar-row { position: relative; height: 22px; }
+  .agg-bar-track { position: absolute; inset: 0; top: 50%; height: 1px; background: var(--border); transform: translateY(-50%); }
+  .agg-bar-row.base .agg-bar-track { display: none; }
   .agg-bar-fill {
     position: absolute; top: 0; left: 50%; transform: translateX(-50%);
     height: 100%; border-radius: 999px; background: var(--accent);
@@ -274,13 +275,31 @@
   .agg-bar-fill.base { left: 0; transform: none; }
   .agg-bar-fill > span:first-child { background: var(--accent); }
   .agg-bar-fill > span:last-child { background: var(--accent-dim); }
-  .agg-stats { display: flex; flex-direction: column; gap: 16px; flex: none; text-align: right; }
-  .agg-stats .stat-row { display: flex; flex-direction: column; }
-  .agg-stats .stat-val { font-weight: 700; font-size: 13.5px; }
-  .agg-stats .stat-label { font-size: 12px; color: var(--muted); }
-  .agg-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-  .agg-legend .ldot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+  .agg-stats { display: flex; flex-direction: column; gap: 20px; flex: none; text-align: right; }
+  .agg-stats .stat-row { display: flex; flex-direction: column; line-height: 1.25; }
+  .agg-stats .stat-val { font-weight: 700; font-size: 15px; }
+  .agg-stats .stat-label { font-size: 12.5px; color: var(--muted); }
+  .agg-legend { display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .agg-legend .ldot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: -1px; }
   .agg-empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
+
+  .row-popup {
+    position: fixed;
+    z-index: 200;
+    pointer-events: none;
+    filter: drop-shadow(0 12px 32px rgba(0,0,0,.5));
+  }
+  .row-popup .aggregate-card {
+    max-width: 420px;
+    padding: 20px 24px;
+    gap: 18px;
+  }
+  .row-popup .agg-title .name { font-size: 16px; }
+  .row-popup .agg-headline { font-size: 22px; }
+  .row-popup .agg-bar-row { height: 18px; }
+  .row-popup .agg-bars { gap: 15px; }
+  .row-popup .agg-stats { gap: 15px; }
+  tbody tr[data-hoverable] { cursor: default; }
 
   .columns-dropdown { position: relative; }
   .columns-panel {
@@ -519,6 +538,10 @@
     </div>
     <div class="empty" id="emptyMsg">Loading saved entries…</div>
   </div>
+</div>
+
+<div class="row-popup" id="rowPopup" style="display:none;">
+  <div class="aggregate-card" id="rowPopupCard"></div>
 </div>
 
 <script>
@@ -1017,6 +1040,61 @@ function avg(vals) {
   return clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
 }
 
+// stages: [{label, value, breakdown:[{label, pct}]}] — breakdown pct per category should already sum to ~100 per stage.
+// valueFormat: (n) => string, used for the headline and each stat's number.
+function buildProposalsCardHtml({ titleName, subLabel, periodLabel, stages, valueFormat, headlineSuffix = '' }) {
+  if (!stages.length) return `<div class="agg-empty">No funnel data available.</div>`;
+
+  const categoryOrder = [];
+  stages.forEach(s => (s.breakdown || []).forEach(b => { if (!categoryOrder.includes(b.label)) categoryOrder.push(b.label); }));
+  const bdColors = ['var(--accent)', 'var(--accent-dim)', '#8fb3ea', '#3a5a99'];
+  const colorFor = label => bdColors[categoryOrder.indexOf(label) % bdColors.length];
+
+  const baseVal = stages[0].value;
+
+  const barsHtml = stages.map((s, i) => {
+    const pct = baseVal ? Math.min(100, (s.value / baseVal) * 100) : 0;
+    const bd = s.breakdown || [];
+    let fillInner = '';
+    if (bd.length) {
+      fillInner = bd.map(b => `<span style="width:${b.pct}%; background:${colorFor(b.label)};"></span>`).join('');
+    }
+    return `
+      <div class="agg-bar-row${i === 0 ? ' base' : ''}">
+        <div class="agg-bar-track"></div>
+        <div class="agg-bar-fill${i === 0 ? ' base' : ''}" style="width:${pct}%; ${bd.length ? '' : 'background:var(--accent);'}">${fillInner}</div>
+      </div>`;
+  }).join('');
+
+  const statsHtml = stages.map(s => `
+    <div class="stat-row">
+      <span class="stat-val">${valueFormat(s.value)}</span>
+      <span class="stat-label">${escapeHtml(s.label)}</span>
+    </div>
+  `).join('');
+
+  const legendHtml = categoryOrder.length
+    ? `<div class="agg-legend">${categoryOrder.map(label =>
+        `<span><span class="ldot" style="background:${colorFor(label)};"></span>${escapeHtml(label)}</span>`
+      ).join('')}<span style="font-size:11px; opacity:.75;">(split shown per stage — varies by stage)</span></div>`
+    : '';
+
+  return `
+    <div class="agg-top">
+      <div class="agg-title-group">
+        <div class="agg-title"><span class="name">${escapeHtml(titleName)}</span><span class="sub">${escapeHtml(subLabel)}</span></div>
+        <div class="agg-headline">${valueFormat(stages[0].value)} ${escapeHtml(stages[0].label.toLowerCase())}${headlineSuffix}</div>
+      </div>
+      <span class="agg-period-pill">${escapeHtml(periodLabel || 'period n/a')}</span>
+    </div>
+    <div class="agg-body">
+      <div class="agg-bars">${barsHtml}</div>
+      <div class="agg-stats">${statsHtml}</div>
+    </div>
+    ${legendHtml}
+  `;
+}
+
 function renderAggregateCard(rows, totalCount, activeFilters) {
   const section = document.getElementById('aggregateSection');
   const summaryEl = document.getElementById('filterSummary');
@@ -1064,61 +1142,58 @@ function renderAggregateCard(rows, totalCount, activeFilters) {
     return;
   }
 
-  // consistent color per category name across every bar (e.g. Organic is always the same color)
-  const categoryOrder = [];
-  stageAverages.forEach(s => s.breakdownAverages.forEach(b => { if (!categoryOrder.includes(b.label)) categoryOrder.push(b.label); }));
-  const bdColors = ['var(--accent)', 'var(--accent-dim)', '#8fb3ea', '#3a5a99'];
-  const colorFor = label => bdColors[categoryOrder.indexOf(label) % bdColors.length];
-
-  const baseAvg = stageAverages[0].avg;
-
-  const barsHtml = stageAverages.map((s, i) => {
-    const pct = baseAvg ? Math.min(100, (s.avg / baseAvg) * 100) : 0;
-    let fillInner = '';
-    if (s.breakdownAverages.length) {
-      fillInner = s.breakdownAverages.map(b =>
-        `<span style="width:${b.pct}%; background:${colorFor(b.label)};"></span>`
-      ).join('');
-    }
-    return `
-      <div class="agg-bar-row">
-        <div class="agg-bar-track"></div>
-        <div class="agg-bar-fill${i === 0 ? ' base' : ''}" style="width:${pct}%; ${s.breakdownAverages.length ? '' : 'background:var(--accent);'}">${fillInner}</div>
-      </div>`;
-  }).join('');
-
-  const statsHtml = stageAverages.map(s => `
-    <div class="stat-row">
-      <span class="stat-val">${s.avg.toFixed(1)}</span>
-      <span class="stat-label">${escapeHtml(s.label)}</span>
-    </div>
-  `).join('');
-
-  const legendHtml = categoryOrder.length
-    ? `<div class="agg-legend">${categoryOrder.map(label =>
-        `<span><span class="ldot" style="background:${colorFor(label)};"></span>${escapeHtml(label)}</span>`
-      ).join('')}<span style="font-size:11px; opacity:.75;">(split shown per stage — varies by stage)</span></div>`
-    : '';
-
   const periodNote = excludedCount
     ? `<div class="agg-empty" style="font-size:11.5px;">${excludedCount} of ${funnelRows.length} filtered entr${excludedCount === 1 ? 'y uses' : 'ies use'} a different period and ${excludedCount === 1 ? "isn't" : "aren't"} included above.</div>`
     : '';
 
-  cardEl.innerHTML = `
-    <div class="agg-top">
-      <div class="agg-title-group">
-        <div class="agg-title"><span class="name">Proposals</span><span class="sub">average of ${dominantRows.length}</span></div>
-        <div class="agg-headline">${stageAverages[0].avg.toFixed(1)} ${escapeHtml(stageAverages[0].label.toLowerCase())} (avg)</div>
-      </div>
-      <span class="agg-period-pill">${escapeHtml(dominantPeriod || 'period n/a')}</span>
-    </div>
-    <div class="agg-body">
-      <div class="agg-bars">${barsHtml}</div>
-      <div class="agg-stats">${statsHtml}</div>
-    </div>
-    ${legendHtml}
-    ${periodNote}
-  `;
+  const cardHtml = buildProposalsCardHtml({
+    titleName: 'Proposals',
+    subLabel: `average of ${dominantRows.length}`,
+    periodLabel: dominantPeriod,
+    stages: stageAverages.map(s => ({
+      label: s.label,
+      value: s.avg,
+      breakdown: s.breakdownAverages.map(b => ({ label: b.label, pct: b.pct }))
+    })),
+    valueFormat: n => n.toFixed(1),
+    headlineSuffix: ' (avg)'
+  });
+
+  cardEl.innerHTML = cardHtml + periodNote;
+}
+
+const rowPopup = document.getElementById('rowPopup');
+const rowPopupCard = document.getElementById('rowPopupCard');
+
+function showRowPopup(entry, rowEl) {
+  if (!entry.stages.length) return;
+  rowPopupCard.innerHTML = buildProposalsCardHtml({
+    titleName: entry.title || 'Proposals',
+    subLabel: [entry.source, countryOf(entry)].filter(Boolean).join(' · '),
+    periodLabel: entry.funnelPeriod,
+    stages: entry.stages.map(s => ({
+      label: s.label,
+      value: s.value,
+      breakdown: (s.breakdown || []).map(b => ({ label: b.label, pct: b.percent }))
+    })),
+    valueFormat: n => String(n)
+  });
+
+  const r = rowEl.getBoundingClientRect();
+  const popupWidth = 420;
+  const margin = 12;
+  let left = r.right + margin;
+  if (left + popupWidth > window.innerWidth) left = Math.max(margin, r.left - popupWidth - margin);
+  let top = r.top;
+  rowPopup.style.display = 'block';
+  const popupHeight = rowPopup.getBoundingClientRect().height || 260;
+  if (top + popupHeight > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - popupHeight - margin);
+  rowPopup.style.left = `${left}px`;
+  rowPopup.style.top = `${top}px`;
+}
+
+function hideRowPopup() {
+  rowPopup.style.display = 'none';
 }
 
 function renderTable() {
@@ -1325,7 +1400,10 @@ function renderTable() {
 
     const tr = document.createElement('tr');
     if (isMine) tr.classList.add('mine-row');
+    tr.setAttribute('data-hoverable', '');
     tr.innerHTML = cells;
+    tr.addEventListener('mouseenter', () => showRowPopup(e, tr));
+    tr.addEventListener('mouseleave', hideRowPopup);
     tbody.appendChild(tr);
   });
 
