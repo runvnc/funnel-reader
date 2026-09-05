@@ -111,6 +111,12 @@
   }
   .card img { width: 100%; border-radius: 8px; display: block; background: #000; }
   .card .rowline { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .stage-block {
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 6px 0 8px 10px; border-left: 2px solid var(--border);
+  }
+  .stage-block .stage-breakdown { display: flex; flex-direction: column; gap: 5px; }
+  .stage-block .btn-ghost { padding: 4px 8px; font-size: 11px; }
   .card input[type=text] {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -532,7 +538,7 @@ const emptyMsg = document.getElementById('emptyMsg');
 
 // entry shape (mirrors the D1 row via /api/entries):
 // { id, title, source, location:{country,region,label}|null,
-//   funnelPeriod, stages:[{label,value}], breakdown:[{label,percent}],
+//   funnelPeriod, stages:[{label,value,breakdown:[{label,percent}]}],
 //   profilePeriod, profileTab, profileMetrics:[{label,value}],
 //   status:{jobSuccess, topRated, topRatedPlus, expertVetted, earnings12mo, connects} }
 let entries = [];
@@ -715,7 +721,7 @@ function blankCard(id, dataUrl) {
   return {
     id, dataUrl, state: 'loading', error: '',
     title: '', source: '', location: null,
-    funnelPeriod: '', stages: [], breakdown: [],
+    funnelPeriod: '', stages: [],
     profilePeriod: '', profileTab: '', profileMetrics: [],
     status: { jobSuccess: null, topRated: null, topRatedPlus: null, expertVetted: null, earnings12mo: null, connects: null }
   };
@@ -744,8 +750,11 @@ async function runExtraction(card) {
     card.source = d.source || '';
     const funnel = d.funnel || {};
     card.funnelPeriod = funnel.period || '';
-    card.stages = (funnel.stages || []).map(s => ({ label: s.label, value: Number(s.value) || 0 }));
-    card.breakdown = (funnel.breakdown || []).map(b => ({ label: b.label, percent: Number(b.percent) || 0 }));
+    card.stages = (funnel.stages || []).map(s => ({
+      label: s.label,
+      value: Number(s.value) || 0,
+      breakdown: (s.breakdown || []).map(b => ({ label: b.label, percent: Number(b.percent) || 0 }))
+    }));
     const pm = d.profile_metrics || {};
     card.profilePeriod = pm.period || '';
     card.profileTab = pm.active_tab || '';
@@ -783,8 +792,6 @@ function renderPending() {
         <input class="metafield" placeholder="e.g. 2026" value="${escapeHtml(card.funnelPeriod)}" data-field="funnelPeriod">
         <div id="stageRows-${card.id}"></div>
         <button class="btn-ghost" data-action="addstage">+ add stage</button>
-        <div id="breakdownRows-${card.id}"></div>
-        <button class="btn-ghost" data-action="addbreakdown">+ add breakdown category</button>
 
         <div class="sectiontitle">Profile metrics · period</div>
         <input class="metafield" placeholder="e.g. 2026" value="${escapeHtml(card.profilePeriod)}" data-field="profilePeriod">
@@ -828,8 +835,6 @@ function renderPending() {
 
     const stageContainer = el.querySelector(`#stageRows-${card.id}`);
     renderStageRows(stageContainer, card);
-    const breakdownContainer = el.querySelector(`#breakdownRows-${card.id}`);
-    renderBreakdownRows(breakdownContainer, card);
     const profileContainer = el.querySelector(`#profileRows-${card.id}`);
     renderProfileRows(profileContainer, card);
 
@@ -865,12 +870,8 @@ function renderPending() {
     });
     el.querySelector('[data-action="commit"]').addEventListener('click', () => commitCard(card));
     el.querySelector('[data-action="addstage"]').addEventListener('click', () => {
-      card.stages.push({ label: 'Stage', value: 0 });
+      card.stages.push({ label: 'Stage', value: 0, breakdown: [] });
       renderStageRows(stageContainer, card);
-    });
-    el.querySelector('[data-action="addbreakdown"]').addEventListener('click', () => {
-      card.breakdown.push({ label: 'Category', percent: 0 });
-      renderBreakdownRows(breakdownContainer, card);
     });
     el.querySelector('[data-action="addprofile"]').addEventListener('click', () => {
       card.profileMetrics.push({ label: 'Metric', value: 0 });
@@ -882,24 +883,36 @@ function renderPending() {
 function renderStageRows(container, card) {
   container.innerHTML = '';
   card.stages.forEach((s, i) => {
-    const row = document.createElement('div');
-    row.className = 'rowline';
-    row.innerHTML = `
-      <input type="text" value="${escapeHtml(s.label)}" style="flex:1; text-align:left;">
-      <input type="text" inputmode="numeric" value="${s.value}" style="width:56px; text-align:right;">
-      <button class="rm" title="remove stage">×</button>
+    if (!s.breakdown) s.breakdown = [];
+    const block = document.createElement('div');
+    block.className = 'stage-block';
+    block.innerHTML = `
+      <div class="rowline">
+        <input type="text" value="${escapeHtml(s.label)}" style="flex:1; text-align:left;">
+        <input type="text" inputmode="numeric" value="${s.value}" style="width:56px; text-align:right;">
+        <button class="rm" title="remove stage">×</button>
+      </div>
+      <div class="stage-breakdown" id="stageBreakdown-${card.id}-${i}"></div>
+      <button class="btn-ghost" data-action="addstagebreakdown" style="align-self:flex-start;">+ breakdown for this stage</button>
     `;
-    const [labelInput, valueInput, rmBtn] = row.querySelectorAll('input, button');
+    const [labelInput, valueInput, rmBtn] = block.querySelectorAll('.rowline input, .rowline button');
     labelInput.addEventListener('input', e => { s.label = e.target.value; });
     valueInput.addEventListener('input', e => { s.value = Number(e.target.value.replace(/[^\d.]/g, '')) || 0; });
     rmBtn.addEventListener('click', () => { card.stages.splice(i, 1); renderStageRows(container, card); });
-    container.appendChild(row);
+    container.appendChild(block);
+
+    const bdContainer = block.querySelector(`#stageBreakdown-${card.id}-${i}`);
+    renderStageBreakdownRows(bdContainer, s);
+    block.querySelector('[data-action="addstagebreakdown"]').addEventListener('click', () => {
+      s.breakdown.push({ label: s.breakdown.length ? 'Boosted' : 'Organic', percent: s.breakdown.length ? 20 : 80 });
+      renderStageBreakdownRows(bdContainer, s);
+    });
   });
 }
 
-function renderBreakdownRows(container, card) {
+function renderStageBreakdownRows(container, stage) {
   container.innerHTML = '';
-  card.breakdown.forEach((b, i) => {
+  stage.breakdown.forEach((b, i) => {
     const row = document.createElement('div');
     row.className = 'rowline';
     row.innerHTML = `
@@ -910,7 +923,7 @@ function renderBreakdownRows(container, card) {
     const [labelInput, valueInput, rmBtn] = row.querySelectorAll('input, button');
     labelInput.addEventListener('input', e => { b.label = e.target.value; });
     valueInput.addEventListener('input', e => { b.percent = Number(e.target.value.replace(/[^\d.]/g, '')) || 0; });
-    rmBtn.addEventListener('click', () => { card.breakdown.splice(i, 1); renderBreakdownRows(container, card); });
+    rmBtn.addEventListener('click', () => { stage.breakdown.splice(i, 1); renderStageBreakdownRows(container, stage); });
     container.appendChild(row);
   });
 }
@@ -944,8 +957,7 @@ async function commitCard(card) {
     source: card.source,
     location: card.location,
     funnelPeriod: card.funnelPeriod,
-    stages: card.stages.map(s => ({ ...s })),
-    breakdown: card.breakdown.map(b => ({ ...b })),
+    stages: card.stages.map(s => ({ ...s, breakdown: (s.breakdown || []).map(b => ({ ...b })) })),
     profilePeriod: card.profilePeriod,
     profileTab: card.profileTab,
     profileMetrics: card.profileMetrics.map(m => ({ ...m })),
@@ -1032,40 +1044,46 @@ function renderAggregateCard(rows, totalCount, activeFilters) {
   dominantRows.forEach(r => r.stages.forEach(s => { if (!stageOrder.includes(s.label)) stageOrder.push(s.label); }));
   const stageAverages = stageOrder.map(label => ({
     label,
-    avg: avg(dominantRows.map(r => r.stages.find(s => s.label === label)?.value))
+    avg: avg(dominantRows.map(r => r.stages.find(s => s.label === label)?.value)),
+    breakdownAverages: (() => {
+      const bdRows = dominantRows.filter(r => r.stages.find(s => s.label === label)?.breakdown?.length);
+      const order = [];
+      bdRows.forEach(r => r.stages.find(s => s.label === label).breakdown.forEach(b => { if (!order.includes(b.label)) order.push(b.label); }));
+      const avgs = order.map(catLabel => ({
+        label: catLabel,
+        avg: avg(bdRows.map(r => r.stages.find(s => s.label === label).breakdown.find(b => b.label === catLabel)?.percent))
+      })).filter(b => b.avg !== null);
+      const total = avgs.reduce((a, b) => a + b.avg, 0);
+      if (total > 0) avgs.forEach(b => { b.pct = (b.avg / total) * 100; });
+      return avgs;
+    })()
   })).filter(s => s.avg !== null);
-
-  const breakdownRows = dominantRows.filter(r => r.breakdown.length);
-  const breakdownOrder = [];
-  breakdownRows.forEach(r => r.breakdown.forEach(b => { if (!breakdownOrder.includes(b.label)) breakdownOrder.push(b.label); }));
-  const breakdownAverages = breakdownOrder.map(label => ({
-    label,
-    avg: avg(breakdownRows.map(r => r.breakdown.find(b => b.label === label)?.percent))
-  })).filter(b => b.avg !== null);
-  // normalize so segments sum to 100
-  const bdTotal = breakdownAverages.reduce((a, b) => a + b.avg, 0);
-  if (bdTotal > 0) breakdownAverages.forEach(b => { b.pct = (b.avg / bdTotal) * 100; });
 
   if (!stageAverages.length) {
     cardEl.innerHTML = `<div class="agg-empty">No funnel data in the current selection.</div>`;
     return;
   }
 
-  const baseAvg = stageAverages[0].avg;
+  // consistent color per category name across every bar (e.g. Organic is always the same color)
+  const categoryOrder = [];
+  stageAverages.forEach(s => s.breakdownAverages.forEach(b => { if (!categoryOrder.includes(b.label)) categoryOrder.push(b.label); }));
   const bdColors = ['var(--accent)', 'var(--accent-dim)', '#8fb3ea', '#3a5a99'];
+  const colorFor = label => bdColors[categoryOrder.indexOf(label) % bdColors.length];
+
+  const baseAvg = stageAverages[0].avg;
 
   const barsHtml = stageAverages.map((s, i) => {
     const pct = baseAvg ? Math.min(100, (s.avg / baseAvg) * 100) : 0;
     let fillInner = '';
-    if (i === 0 && breakdownAverages.length) {
-      fillInner = breakdownAverages.map((b, bi) =>
-        `<span style="width:${b.pct}%; background:${bdColors[bi % bdColors.length]};"></span>`
+    if (s.breakdownAverages.length) {
+      fillInner = s.breakdownAverages.map(b =>
+        `<span style="width:${b.pct}%; background:${colorFor(b.label)};"></span>`
       ).join('');
     }
     return `
       <div class="agg-bar-row">
         <div class="agg-bar-track"></div>
-        <div class="agg-bar-fill${i === 0 ? ' base' : ''}" style="width:${pct}%; ${i === 0 && breakdownAverages.length ? '' : 'background:var(--accent);'}">${fillInner}</div>
+        <div class="agg-bar-fill${i === 0 ? ' base' : ''}" style="width:${pct}%; ${s.breakdownAverages.length ? '' : 'background:var(--accent);'}">${fillInner}</div>
       </div>`;
   }).join('');
 
@@ -1076,10 +1094,10 @@ function renderAggregateCard(rows, totalCount, activeFilters) {
     </div>
   `).join('');
 
-  const legendHtml = breakdownAverages.length
-    ? `<div class="agg-legend">${breakdownAverages.map((b, bi) =>
-        `<span><span class="ldot" style="background:${bdColors[bi % bdColors.length]};"></span>${escapeHtml(b.label)} (${b.pct.toFixed(0)}%)</span>`
-      ).join('')}</div>`
+  const legendHtml = categoryOrder.length
+    ? `<div class="agg-legend">${categoryOrder.map(label =>
+        `<span><span class="ldot" style="background:${colorFor(label)};"></span>${escapeHtml(label)}</span>`
+      ).join('')}<span style="font-size:11px; opacity:.75;">(split shown per stage — varies by stage)</span></div>`
     : '';
 
   const periodNote = excludedCount
@@ -1126,8 +1144,9 @@ function renderTable() {
   }
 
   const rows = entries.filter(e => {
-    if (bMode === 'with' && !e.breakdown.length) return false;
-    if (bMode === 'without' && e.breakdown.length) return false;
+    const hasBd = e.stages.some(s => s.breakdown && s.breakdown.length);
+    if (bMode === 'with' && !hasBd) return false;
+    if (bMode === 'without' && hasBd) return false;
     if (cMode !== 'all' && countryOf(e) !== cMode) return false;
     if (!matchesBool(trMode, e.status.topRated)) return false;
     if (!matchesBool(trpMode, e.status.topRatedPlus)) return false;
@@ -1184,11 +1203,11 @@ function renderTable() {
     const key = `${s.label}__${e.funnelPeriod}`;
     if (!stageKeys.some(k => k.key === key)) stageKeys.push({ key, label: s.label, period: e.funnelPeriod });
   }));
-  const breakdownKeys = [];
-  rows.forEach(e => e.breakdown.forEach(b => {
-    const key = `${b.label}__${e.funnelPeriod}`;
-    if (!breakdownKeys.some(k => k.key === key)) breakdownKeys.push({ key, label: b.label, period: e.funnelPeriod });
-  }));
+  const breakdownKeys = []; // {key,stageLabel,catLabel,period}
+  rows.forEach(e => e.stages.forEach(s => (s.breakdown || []).forEach(b => {
+    const key = `${s.label}__${b.label}__${e.funnelPeriod}`;
+    if (!breakdownKeys.some(k => k.key === key)) breakdownKeys.push({ key, stageLabel: s.label, catLabel: b.label, period: e.funnelPeriod });
+  })));
   const profileKeys = [];
   rows.forEach(e => e.profileMetrics.forEach(m => {
     const key = `${m.label}__${e.profilePeriod}`;
@@ -1227,7 +1246,7 @@ function renderTable() {
     stageKeys.map(k => `<th>${escapeHtml(k.label)}<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') +
     (showPctBase ? stageKeys.slice(1).map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
     (showConversion ? stageKeys.slice(1).map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">of prior stage</span></th>`).join('') : '') +
-    (showBreakdown ? breakdownKeys.map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
+    (showBreakdown ? breakdownKeys.map(k => `<th>${escapeHtml(k.stageLabel)} ${escapeHtml(k.catLabel)} %<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
     (showProfile ? profileKeys.map(k => `<th>${escapeHtml(k.label)}<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
     (showStatus ? statusCols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') : '');
 
@@ -1241,7 +1260,6 @@ function renderTable() {
 
   rows.forEach(e => {
     const stageByLabel = {}; e.stages.forEach(s => stageByLabel[s.label] = s.value);
-    const bdByLabel = {}; e.breakdown.forEach(b => bdByLabel[b.label] = b.percent);
     const pmByLabel = {}; e.profileMetrics.forEach(m => pmByLabel[m.label] = m.value);
     const baseVal = e.stages[0]?.value ?? null;
 
@@ -1281,7 +1299,8 @@ function renderTable() {
       cells += `<td>${conv.toFixed(1)}%</td>`;
     });
     if (showBreakdown) breakdownKeys.forEach(k => {
-      const v = (e.funnelPeriod === k.period) ? bdByLabel[k.label] : undefined;
+      const stage = (e.funnelPeriod === k.period) ? e.stages.find(s => s.label === k.stageLabel) : undefined;
+      const v = stage ? stage.breakdown.find(b => b.label === k.catLabel)?.percent : undefined;
       if (v !== undefined) bdVals[k.key].push(v);
       cells += `<td>${v === undefined ? '—' : v.toFixed(1) + '%'}</td>`;
     });

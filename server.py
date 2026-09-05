@@ -55,10 +55,15 @@ Extract as strict JSON, with no markdown fences and no commentary. Use this exac
   "funnel": {
     "period": "<the exact text of the Proposals card's own dropdown, e.g. '2026' or 'Last 30 days'; empty string if the Proposals card isn't visible or has no dropdown>",
     "stages": [
-      {"label": "<short stage name, e.g. 'Sent', 'Viewed', 'Interviews', 'Hires'>", "value": <integer>}
-    ],
-    "breakdown": [
-      {"label": "<category name from a color legend under the first/base stage's bar, e.g. 'Organic', 'Boosted'>", "percent": <best-estimate percentage 0-100 of the base bar this category's color visually occupies>}
+      {
+        "label": "<short stage name, e.g. 'Sent', 'Viewed', 'Interviews', 'Hires'>",
+        "value": <integer>,
+        "colors_seen_in_bar": "<literally describe what you see in THIS stage's own bar/pill shape, e.g. 'light blue then dark blue' or 'solid blue, one color'>",
+        "breakdown": [
+          {"label": "<name of the FIRST/lighter color's category, e.g. 'Organic' — read exact names from the small legend dots below the bars if present, otherwise default to 'Organic'>", "percent": <your best estimate, 0-100, of what fraction of THIS stage's bar width, left to right, is the first color>},
+          {"label": "<name of the SECOND/darker color's category, e.g. 'Boosted'>", "percent": <100 minus the first entry's percent, so the two entries always sum to 100>}
+        ]
+      }
     ]
   },
   "profile_metrics": {
@@ -80,10 +85,12 @@ Extract as strict JSON, with no markdown fences and no commentary. Use this exac
 
 Rules:
 - funnel.stages must be ordered from largest/first funnel step to smallest/last step, matching the image's top-to-bottom order. If a stage's number is not visible/legible, omit that stage rather than guessing.
-- funnel.breakdown applies only when the FIRST/base stage's bar is visually split into two or more colors with a labeled legend nearby (e.g. a dot + "Organic" and a dot + "Boosted"). Estimate each category's share of that bar's width as a percentage; percentages should sum to roughly 100. If no such legend is visible, return "breakdown": [] — do not invent one.
+- For EVERY stage (Sent, Viewed, Interviews, Hires — not just the first one), look closely at that specific stage's own bar/pill shape and fill in colors_seen_in_bar honestly based on what you actually see there. Most Upwork Proposals cards render every single bar as two shades of the same color side by side (a lighter shade first, then a darker shade), even on very short/thin bars like Hires — look carefully before concluding it's solid.
+- If colors_seen_in_bar for a stage describes two colors, fill in that stage's breakdown with your best-estimate percentage split; the split point is typically DIFFERENT for each stage, so estimate each one independently rather than copying the first stage's ratio.
+- When a stage has two colors, its breakdown array must have exactly 2 entries (one per color) whose percents sum to 100 — never just 1 entry. Only leave a stage's breakdown as [] (zero entries) if colors_seen_in_bar for that specific stage genuinely describes one solid color.
 - Completely ignore any "Boosted messages" card if present — do not extract anything from it, it has no year-based reporting.
 - Every "period" field must be the literal dropdown text as shown (e.g. "2026", "Last 7 days", "Last 30 days", "Last 90 days"), never inferred or defaulted to a year.
-- If a whole section (funnel, profile_metrics) isn't present in the screenshot at all, still include the key with empty/null values (period: "", stages/metrics: [], breakdown: []).
+- If a whole section (funnel, profile_metrics) isn't present in the screenshot at all, still include the key with empty/null values (period: "", stages/metrics: []).
 - If account_status isn't visible at all, still include the key with all values null.
 - Return ONLY the JSON object.
 """
@@ -99,11 +106,11 @@ def call_openai_vision(data_url):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": EXTRACTION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
                 ],
             }
         ],
-        "max_completion_tokens": 1100,
+        "max_completion_tokens": 1300,
     }
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",
@@ -130,12 +137,12 @@ def call_openrouter_vision(data_url):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": EXTRACTION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
                 ],
             }
         ],
         "temperature": 0,
-        "max_tokens": 1100,
+        "max_tokens": 1300,
     }
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions",
