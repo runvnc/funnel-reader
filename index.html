@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Funnel Reader</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --bg: #0e0f13;
+    --panel: #16181f;
+    --panel-2: #1c1f28;
+    --border: #2a2d38;
+    --text: #eef0f5;
+    --muted: #8b8fa3;
+    --accent: #5b8def;
+    --accent-dim: #2f4a86;
+    --good: #4fd1a5;
+    --warn: #e8b23c;
+    --bad: #e8637a;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 24px 64px;
+  }
+  .wrap {
+    max-width: 1840px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 650;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .status-item { display: inline-flex; gap: 8px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
+  .dot.on { background: var(--good); }
+  .dot.warn { background: var(--warn); }
+
+  .provider-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .linkbtn {
+    background: none; border: none; color: var(--accent); font-size: 12px;
+    cursor: pointer; padding: 0; text-decoration: underline;
+  }
+
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 14px;
+    background: var(--panel);
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.drag {
+    border-color: var(--accent);
+    background: var(--panel-2);
+  }
+  .dropzone .big { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .dropzone .small { font-size: 12.5px; color: var(--muted); }
+  input[type=file] { display: none; }
+
+  .pending {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card img { width: 100%; border-radius: 8px; display: block; background: #000; }
+  .card .rowline { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card input[type=text] {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 3px 6px;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .stagelabel { font-size: 12.5px; color: var(--muted); }
+  .card .titlefield {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .card .metafield {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 12px;
+  }
+  .card .sectiontitle {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 2px 0 -2px;
+  }
+  .card .cardstate { font-size: 11.5px; color: var(--muted); }
+  .card .cardstate.err { color: var(--bad); }
+  .card button {
+    border: none;
+    border-radius: 7px;
+    padding: 7px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:disabled { background: var(--accent-dim); color: #9fb3d9; cursor: default; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border) !important; }
+  .btn-ghost:hover { color: var(--text); }
+  .spinner {
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: spin .7s linear infinite; display: inline-block; vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .togglebool { display: flex; gap: 6px; }
+  .togglebool button {
+    flex: 1; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    font-size: 11.5px; padding: 5px 4px;
+  }
+  .togglebool button.active { background: var(--accent-dim); color: #cfe0ff; border-color: var(--accent); }
+
+  .tablewrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .tablehead-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 12px; gap: 12px; flex-wrap: wrap; }
+  .tablehead-row h2 {
+    margin: 0; font-size: 14px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .filter-row { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .filter-group { display: flex; align-items: center; gap: 6px; }
+
+  .scrollx {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-dim) var(--panel-2);
+  }
+  .scrollx::-webkit-scrollbar { height: 10px; }
+  .scrollx::-webkit-scrollbar-track { background: var(--panel-2); }
+  .scrollx::-webkit-scrollbar-thumb {
+    background: var(--accent-dim);
+    border-radius: 6px;
+    border: 2px solid var(--panel-2);
+  }
+  .scrollx::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  .columns-dropdown { position: relative; }
+  .columns-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 20;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    min-width: 190px;
+  }
+  .columns-panel label {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: var(--text);
+    padding: 5px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .columns-panel label:hover { background: var(--panel); }
+  .columns-panel input[type=checkbox] { accent-color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  thead th {
+    text-align: right;
+    padding: 8px 11px;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead tr.group-row th {
+    border-bottom: none;
+    padding: 10px 11px 2px;
+    color: var(--accent);
+    font-size: 10.5px;
+  }
+  thead th:first-child, tbody td:first-child { text-align: left; }
+  tbody td {
+    padding: 9px 11px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--panel-2); }
+  .rowname { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+  .cardmeta { display: flex; flex-direction: column; gap: 1px; align-items: flex-start; }
+  .cardmeta .source, .cardmeta .loc { font-weight: 500; font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .rm {
+    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--muted); font-size: 14px; line-height: 1;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    flex: none; transition: color .12s, border-color .12s, background .12s;
+  }
+  .rm:hover { color: #fff; border-color: var(--bad); background: var(--bad); }
+  .barcell { display: inline-flex; align-items: center; gap: 6px; }
+  .mini-bar {
+    width: 46px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; display: inline-block;
+  }
+  .mini-bar > span { display: block; height: 100%; background: var(--accent); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge.has { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+  .badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+
+  tfoot td {
+    padding: 11px 11px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    border-top: 1.5px solid var(--border);
+    background: var(--panel-2);
+    font-weight: 700;
+  }
+  tfoot td:first-child { text-align: left; color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .03em; }
+
+  .empty {
+    padding: 40px 18px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Funnel Reader</h1>
+    <p>Drop in freelance-platform stats screenshots — funnel, profile metrics and account status all get read automatically and compared across entries.</p>
+    <div class="status">
+      <div class="status-item">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">checking API keys…</span>
+      </div>
+      <span class="provider-row">
+        provider:
+        <select id="providerSelect">
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter</option>
+        </select>
+      </span>
+      <div class="status-item">
+        <span class="dot" id="geoDot"></span>
+        <span id="geoText">location not detected</span>
+        <button class="linkbtn" id="geoRetry">detect / retry</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <div class="big">Drop screenshots here, or click to choose files</div>
+    <div class="small">You can also paste an image (Ctrl/Cmd+V) anywhere on the page</div>
+    <input type="file" id="fileInput" accept="image/*" multiple>
+  </div>
+
+  <div class="pending" id="pending"></div>
+
+  <div class="tablewrap">
+    <div class="tablehead-row">
+      <h2>Comparison</h2>
+      <div class="filter-row">
+        <div class="filter-group">
+          breakdown:
+          <select id="filterBreakdown">
+            <option value="all">All entries</option>
+            <option value="with">With breakdown data</option>
+            <option value="without">Without breakdown data</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          location:
+          <select id="filterCountry">
+            <option value="all">All locations</option>
+          </select>
+        </div>
+        <div class="filter-group columns-dropdown">
+          <button class="linkbtn" id="columnsToggleBtn">columns ▾</button>
+          <div class="columns-panel" id="columnsPanel" style="display:none;">
+            <label><input type="checkbox" data-col="pctBase"> % of base</label>
+            <label><input type="checkbox" data-col="conversion"> Conversion (prior stage)</label>
+            <label><input type="checkbox" data-col="breakdown"> Traffic breakdown</label>
+            <label><input type="checkbox" data-col="profile"> Profile metrics</label>
+            <label><input type="checkbox" data-col="status"> Account status</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scrollx">
+      <table id="compTable">
+        <thead>
+          <tr class="group-row" id="theadGroupRow"></tr>
+          <tr id="theadRow"><th>Card</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+        <tfoot><tr id="tfootRow"></tr></tfoot>
+      </table>
+    </div>
+    <div class="empty" id="emptyMsg">No entries yet — add a screenshot above.</div>
+  </div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const pendingEl = document.getElementById('pending');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const providerSelect = document.getElementById('providerSelect');
+const geoDot = document.getElementById('geoDot');
+const geoText = document.getElementById('geoText');
+const geoRetry = document.getElementById('geoRetry');
+const filterBreakdown = document.getElementById('filterBreakdown');
+const filterCountry = document.getElementById('filterCountry');
+
+// entry shape:
+// { id, title, source, location:{country,region,label}|null,
+//   funnelPeriod, stages:[{label,value}], breakdown:[{label,percent}],
+//   profilePeriod, profileTab, profileMetrics:[{label,value}],
+//   status:{jobSuccess, topRated, topRatedPlus, expertVetted, earnings12mo, connects} }
+let entries = [];
+let pendingCards = [];
+let counter = 0;
+
+filterBreakdown.addEventListener('change', renderTable);
+filterCountry.addEventListener('change', renderTable);
+
+const columnVisibility = { pctBase: true, conversion: true, breakdown: false, profile: false, status: false };
+const columnsToggleBtn = document.getElementById('columnsToggleBtn');
+const columnsPanel = document.getElementById('columnsPanel');
+columnsToggleBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  columnsPanel.style.display = columnsPanel.style.display === 'none' ? 'flex' : 'none';
+});
+document.addEventListener('click', e => {
+  if (!columnsPanel.contains(e.target) && e.target !== columnsToggleBtn) columnsPanel.style.display = 'none';
+});
+columnsPanel.querySelectorAll('input[data-col]').forEach(cb => {
+  cb.checked = columnVisibility[cb.dataset.col];
+  cb.addEventListener('change', () => {
+    columnVisibility[cb.dataset.col] = cb.checked;
+    renderTable();
+  });
+});
+
+fetch('/api/status').then(r => r.json()).then(s => {
+  const ok = s.openai || s.openrouter;
+  statusDot.classList.toggle('on', ok);
+  if (s.openai && s.openrouter) statusText.textContent = 'OpenAI + OpenRouter keys loaded';
+  else if (s.openai) statusText.textContent = 'OpenAI key loaded';
+  else if (s.openrouter) { statusText.textContent = 'OpenRouter key loaded'; providerSelect.value = 'openrouter'; }
+  else statusText.textContent = 'No API key found in .env';
+}).catch(() => { statusText.textContent = 'Server not reachable — run python3 server.py'; });
+
+// ---- location (browser geolocation, cached per session) ----
+let sessionLocation = null;
+let locationPromise = null;
+
+function requestLocation() {
+  geoDot.classList.remove('on', 'warn');
+  geoText.textContent = 'requesting location…';
+  locationPromise = new Promise(resolve => {
+    if (!navigator.geolocation) {
+      geoText.textContent = 'geolocation unsupported by this browser';
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+        const j = await r.json();
+        const loc = {
+          country: j.countryName || '',
+          region: j.principalSubdivision || '',
+          city: j.city || j.locality || ''
+        };
+        resolve(loc);
+      } catch (e) {
+        resolve(null);
+      }
+    }, () => resolve(null), { timeout: 8000 });
+  }).then(loc => {
+    sessionLocation = loc;
+    if (loc && loc.country) {
+      geoDot.classList.add('on');
+      geoText.textContent = `location: ${[loc.city, loc.region, loc.country].filter(Boolean).join(', ')}`;
+    } else {
+      geoDot.classList.add('warn');
+      geoText.textContent = 'location unavailable — permission denied or lookup failed';
+    }
+    return loc;
+  });
+  return locationPromise;
+}
+geoRetry.addEventListener('click', requestLocation);
+
+function getSessionLocation() {
+  if (!locationPromise) return requestLocation();
+  return locationPromise;
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+window.addEventListener('paste', e => {
+  const items = e.clipboardData?.items || [];
+  const files = [];
+  for (const it of items) if (it.type.startsWith('image/')) files.push(it.getAsFile());
+  if (files.length) handleFiles(files);
+});
+
+function handleFiles(fileList) {
+  [...fileList].forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => addPending(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function blankCard(id, dataUrl) {
+  return {
+    id, dataUrl, state: 'loading', error: '',
+    title: '', source: '', location: null,
+    funnelPeriod: '', stages: [], breakdown: [],
+    profilePeriod: '', profileTab: '', profileMetrics: [],
+    status: { jobSuccess: null, topRated: null, topRatedPlus: null, expertVetted: null, earnings12mo: null, connects: null }
+  };
+}
+
+async function addPending(dataUrl) {
+  const card = blankCard(++counter, dataUrl);
+  pendingCards.push(card);
+  renderPending();
+  const [locResult] = await Promise.all([getSessionLocation(), runExtraction(card)]);
+  card.location = locResult;
+  renderPending();
+}
+
+async function runExtraction(card) {
+  try {
+    const res = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: card.dataUrl, provider: providerSelect.value })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json.error || 'extraction failed');
+    const d = json.data;
+    card.title = d.title || '';
+    card.source = d.source || '';
+    const funnel = d.funnel || {};
+    card.funnelPeriod = funnel.period || '';
+    card.stages = (funnel.stages || []).map(s => ({ label: s.label, value: Number(s.value) || 0 }));
+    card.breakdown = (funnel.breakdown || []).map(b => ({ label: b.label, percent: Number(b.percent) || 0 }));
+    const pm = d.profile_metrics || {};
+    card.profilePeriod = pm.period || '';
+    card.profileTab = pm.active_tab || '';
+    card.profileMetrics = (pm.metrics || []).map(m => ({ label: m.label, value: Number(m.value) || 0 }));
+    const acc = d.account_status || {};
+    card.status = {
+      jobSuccess: acc.job_success_score_percent ?? null,
+      topRated: acc.top_rated ?? null,
+      topRatedPlus: acc.top_rated_plus ?? null,
+      expertVetted: acc.expert_vetted ?? null,
+      earnings12mo: acc.earnings_12mo_usd ?? null,
+      connects: acc.connects_balance ?? null
+    };
+    const hasAnything = card.stages.length || card.profileMetrics.length ||
+      Object.values(card.status).some(v => v !== null);
+    card.state = hasAnything ? 'ready' : 'error';
+    if (!hasAnything) card.error = 'Nothing recognized — edit manually or retry.';
+  } catch (err) {
+    card.state = 'error';
+    card.error = String(err.message || err);
+  }
+}
+
+function renderPending() {
+  pendingEl.innerHTML = '';
+  pendingCards.forEach(card => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    const editableBody = `
+        <input class="titlefield" placeholder="Card label" value="${escapeHtml(card.title)}" data-field="title">
+        <input class="metafield" placeholder="Source (e.g. upwork.com)" value="${escapeHtml(card.source)}" data-field="source">
+        <input class="metafield" placeholder="Location (e.g. Austin, TX, USA)" value="${escapeHtml(card.location ? [card.location.city, card.location.region, card.location.country].filter(Boolean).join(', ') : '')}" data-field="location">
+
+        <div class="sectiontitle">Funnel · period</div>
+        <input class="metafield" placeholder="e.g. 2026" value="${escapeHtml(card.funnelPeriod)}" data-field="funnelPeriod">
+        <div id="stageRows-${card.id}"></div>
+        <button class="btn-ghost" data-action="addstage">+ add stage</button>
+        <div id="breakdownRows-${card.id}"></div>
+        <button class="btn-ghost" data-action="addbreakdown">+ add breakdown category</button>
+
+        <div class="sectiontitle">Profile metrics · period</div>
+        <input class="metafield" placeholder="e.g. 2026" value="${escapeHtml(card.profilePeriod)}" data-field="profilePeriod">
+        <div id="profileRows-${card.id}"></div>
+        <button class="btn-ghost" data-action="addprofile">+ add profile metric</button>
+
+        <div class="sectiontitle">Account status (no period)</div>
+        <input class="metafield" placeholder="Job Success Score %" value="${card.status.jobSuccess ?? ''}" data-field="jobSuccess">
+        <input class="metafield" placeholder="12-month earnings $" value="${card.status.earnings12mo ?? ''}" data-field="earnings12mo">
+        <input class="metafield" placeholder="Connects balance" value="${card.status.connects ?? ''}" data-field="connects">
+        <div class="togglebool" data-bool="topRated">
+          <button data-val="true" class="${card.status.topRated === true ? 'active' : ''}">Top Rated</button>
+          <button data-val="false" class="${card.status.topRated === false ? 'active' : ''}">Not</button>
+          <button data-val="null" class="${card.status.topRated === null ? 'active' : ''}">?</button>
+        </div>
+        <div class="togglebool" data-bool="topRatedPlus">
+          <button data-val="true" class="${card.status.topRatedPlus === true ? 'active' : ''}">TR Plus</button>
+          <button data-val="false" class="${card.status.topRatedPlus === false ? 'active' : ''}">Not</button>
+          <button data-val="null" class="${card.status.topRatedPlus === null ? 'active' : ''}">?</button>
+        </div>
+        <div class="togglebool" data-bool="expertVetted">
+          <button data-val="true" class="${card.status.expertVetted === true ? 'active' : ''}">Expert-Vetted</button>
+          <button data-val="false" class="${card.status.expertVetted === false ? 'active' : ''}">Not</button>
+          <button data-val="null" class="${card.status.expertVetted === null ? 'active' : ''}">?</button>
+        </div>
+    `;
+    const body = card.state === 'loading'
+      ? `<div class="cardstate"><span class="spinner"></span> reading image…</div>`
+      : (card.state === 'error' ? `<div class="cardstate err">${escapeHtml(card.error)}</div>${editableBody}` : editableBody);
+
+    el.innerHTML = `
+      <img src="${card.dataUrl}" alt="">
+      ${body}
+      <div class="rowline">
+        <button class="btn-ghost" data-action="discard">Discard</button>
+        <button class="btn-primary" data-action="commit" ${card.state === 'loading' ? 'disabled' : ''}>Add to table</button>
+      </div>
+    `;
+    pendingEl.appendChild(el);
+    if (card.state === 'loading') return;
+
+    const stageContainer = el.querySelector(`#stageRows-${card.id}`);
+    renderStageRows(stageContainer, card);
+    const breakdownContainer = el.querySelector(`#breakdownRows-${card.id}`);
+    renderBreakdownRows(breakdownContainer, card);
+    const profileContainer = el.querySelector(`#profileRows-${card.id}`);
+    renderProfileRows(profileContainer, card);
+
+    el.querySelectorAll('[data-field]').forEach(input => {
+      input.addEventListener('input', e => {
+        const f = input.dataset.field;
+        const v = e.target.value;
+        if (f === 'title') card.title = v;
+        else if (f === 'source') card.source = v;
+        else if (f === 'funnelPeriod') card.funnelPeriod = v;
+        else if (f === 'profilePeriod') card.profilePeriod = v;
+        else if (f === 'jobSuccess') card.status.jobSuccess = v === '' ? null : Number(v) || 0;
+        else if (f === 'earnings12mo') card.status.earnings12mo = v === '' ? null : Number(v.replace(/[^\d.]/g, '')) || 0;
+        else if (f === 'connects') card.status.connects = v === '' ? null : Number(v) || 0;
+        else if (f === 'location') card.location = v ? { country: v, region: '', city: '' } : null;
+      });
+    });
+
+    el.querySelectorAll('.togglebool').forEach(group => {
+      const key = group.dataset.bool;
+      group.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const val = btn.dataset.val;
+          card.status[key] = val === 'true' ? true : (val === 'false' ? false : null);
+          renderPending();
+        });
+      });
+    });
+
+    el.querySelector('[data-action="discard"]').addEventListener('click', () => {
+      pendingCards = pendingCards.filter(c => c.id !== card.id);
+      renderPending();
+    });
+    el.querySelector('[data-action="commit"]').addEventListener('click', () => commitCard(card));
+    el.querySelector('[data-action="addstage"]').addEventListener('click', () => {
+      card.stages.push({ label: 'Stage', value: 0 });
+      renderStageRows(stageContainer, card);
+    });
+    el.querySelector('[data-action="addbreakdown"]').addEventListener('click', () => {
+      card.breakdown.push({ label: 'Category', percent: 0 });
+      renderBreakdownRows(breakdownContainer, card);
+    });
+    el.querySelector('[data-action="addprofile"]').addEventListener('click', () => {
+      card.profileMetrics.push({ label: 'Metric', value: 0 });
+      renderProfileRows(profileContainer, card);
+    });
+  });
+}
+
+function renderStageRows(container, card) {
+  container.innerHTML = '';
+  card.stages.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'rowline';
+    row.innerHTML = `
+      <input type="text" value="${escapeHtml(s.label)}" style="flex:1; text-align:left;">
+      <input type="text" inputmode="numeric" value="${s.value}" style="width:56px; text-align:right;">
+      <button class="rm" title="remove stage">×</button>
+    `;
+    const [labelInput, valueInput, rmBtn] = row.querySelectorAll('input, button');
+    labelInput.addEventListener('input', e => { s.label = e.target.value; });
+    valueInput.addEventListener('input', e => { s.value = Number(e.target.value.replace(/[^\d.]/g, '')) || 0; });
+    rmBtn.addEventListener('click', () => { card.stages.splice(i, 1); renderStageRows(container, card); });
+    container.appendChild(row);
+  });
+}
+
+function renderBreakdownRows(container, card) {
+  container.innerHTML = '';
+  card.breakdown.forEach((b, i) => {
+    const row = document.createElement('div');
+    row.className = 'rowline';
+    row.innerHTML = `
+      <input type="text" value="${escapeHtml(b.label)}" style="flex:1; text-align:left;">
+      <input type="text" inputmode="numeric" value="${b.percent}" style="width:56px; text-align:right;">
+      <button class="rm" title="remove category">×</button>
+    `;
+    const [labelInput, valueInput, rmBtn] = row.querySelectorAll('input, button');
+    labelInput.addEventListener('input', e => { b.label = e.target.value; });
+    valueInput.addEventListener('input', e => { b.percent = Number(e.target.value.replace(/[^\d.]/g, '')) || 0; });
+    rmBtn.addEventListener('click', () => { card.breakdown.splice(i, 1); renderBreakdownRows(container, card); });
+    container.appendChild(row);
+  });
+}
+
+function renderProfileRows(container, card) {
+  container.innerHTML = '';
+  card.profileMetrics.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'rowline';
+    row.innerHTML = `
+      <input type="text" value="${escapeHtml(m.label)}" style="flex:1; text-align:left;">
+      <input type="text" inputmode="numeric" value="${m.value}" style="width:56px; text-align:right;">
+      <button class="rm" title="remove metric">×</button>
+    `;
+    const [labelInput, valueInput, rmBtn] = row.querySelectorAll('input, button');
+    labelInput.addEventListener('input', e => { m.label = e.target.value; });
+    valueInput.addEventListener('input', e => { m.value = Number(e.target.value.replace(/[^\d.]/g, '')) || 0; });
+    rmBtn.addEventListener('click', () => { card.profileMetrics.splice(i, 1); renderProfileRows(container, card); });
+    container.appendChild(row);
+  });
+}
+
+function commitCard(card) {
+  const hasAnything = card.stages.length || card.profileMetrics.length ||
+    Object.values(card.status).some(v => v !== null);
+  if (!hasAnything) { alert('Add at least one stage, profile metric, or account-status value first.'); return; }
+  entries.push({
+    id: card.id,
+    title: card.title || `Card ${entries.length + 1}`,
+    source: card.source,
+    location: card.location,
+    funnelPeriod: card.funnelPeriod,
+    stages: card.stages.map(s => ({ ...s })),
+    breakdown: card.breakdown.map(b => ({ ...b })),
+    profilePeriod: card.profilePeriod,
+    profileTab: card.profileTab,
+    profileMetrics: card.profileMetrics.map(m => ({ ...m })),
+    status: { ...card.status }
+  });
+  pendingCards = pendingCards.filter(c => c.id !== card.id);
+  renderPending();
+  renderTable();
+}
+
+function removeEntry(id) {
+  entries = entries.filter(e => e.id !== id);
+  renderTable();
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function countryOf(e) { return e.location && e.location.country ? e.location.country : ''; }
+
+function updateCountryFilterOptions() {
+  const countries = [...new Set(entries.map(countryOf).filter(Boolean))].sort();
+  const current = filterCountry.value;
+  filterCountry.innerHTML = '<option value="all">All locations</option>' +
+    countries.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (countries.includes(current)) filterCountry.value = current;
+}
+
+function avg(vals) {
+  const clean = vals.filter(v => v !== null && v !== undefined && !Number.isNaN(v));
+  return clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
+}
+
+function renderTable() {
+  updateCountryFilterOptions();
+
+  const theadGroup = document.getElementById('theadGroupRow');
+  const thead = document.getElementById('theadRow');
+  const tbody = document.getElementById('tbody');
+  const tfoot = document.getElementById('tfootRow');
+  const emptyMsg = document.getElementById('emptyMsg');
+
+  const bMode = filterBreakdown.value;
+  const cMode = filterCountry.value;
+  const rows = entries.filter(e => {
+    if (bMode === 'with' && !e.breakdown.length) return false;
+    if (bMode === 'without' && e.breakdown.length) return false;
+    if (cMode !== 'all' && countryOf(e) !== cMode) return false;
+    return true;
+  });
+
+  document.getElementById('compTable').style.display = entries.length ? '' : 'none';
+  emptyMsg.style.display = entries.length ? 'none' : '';
+  if (!entries.length) {
+    theadGroup.innerHTML = ''; thead.innerHTML = '<th>Card</th>'; tbody.innerHTML = ''; tfoot.innerHTML = '';
+    return;
+  }
+  if (!rows.length) {
+    theadGroup.innerHTML = '';
+    thead.innerHTML = '<th>Card</th>';
+    tbody.innerHTML = `<tr><td style="padding:20px 14px; color:var(--muted);">No entries match the current filters.</td></tr>`;
+    tfoot.innerHTML = '';
+    return;
+  }
+
+  // column keys are period-qualified so e.g. "2026" and "Last 30 days" never mix
+  const stageKeys = []; // {key,label,period}
+  rows.forEach(e => e.stages.forEach(s => {
+    const key = `${s.label}__${e.funnelPeriod}`;
+    if (!stageKeys.some(k => k.key === key)) stageKeys.push({ key, label: s.label, period: e.funnelPeriod });
+  }));
+  const breakdownKeys = [];
+  rows.forEach(e => e.breakdown.forEach(b => {
+    const key = `${b.label}__${e.funnelPeriod}`;
+    if (!breakdownKeys.some(k => k.key === key)) breakdownKeys.push({ key, label: b.label, period: e.funnelPeriod });
+  }));
+  const profileKeys = [];
+  rows.forEach(e => e.profileMetrics.forEach(m => {
+    const key = `${m.label}__${e.profilePeriod}`;
+    if (!profileKeys.some(k => k.key === key)) profileKeys.push({ key, label: m.label, period: e.profilePeriod });
+  }));
+
+  const periodLabel = p => p ? p : 'period n/a';
+  const statusCols = [
+    { key: 'jobSuccess', label: 'Job Success', kind: 'pct' },
+    { key: 'earnings12mo', label: 'Earnings (12mo)', kind: 'usd' },
+    { key: 'connects', label: 'Connects', kind: 'num' },
+    { key: 'topRated', label: 'Top Rated', kind: 'bool' },
+    { key: 'topRatedPlus', label: 'Top Rated Plus', kind: 'bool' },
+    { key: 'expertVetted', label: 'Expert-Vetted', kind: 'bool' },
+  ];
+
+  const showPctBase = columnVisibility.pctBase && stageKeys.length > 1;
+  const showConversion = columnVisibility.conversion && stageKeys.length > 1;
+  const showBreakdown = columnVisibility.breakdown && breakdownKeys.length;
+  const showProfile = columnVisibility.profile && profileKeys.length;
+  const showStatus = columnVisibility.status;
+
+  // group header row (spans)
+  const groups = [
+    { span: 1, label: '' },
+    { span: stageKeys.length, label: stageKeys.length ? 'Funnel' : '' },
+    { span: showPctBase ? stageKeys.length - 1 : 0, label: showPctBase ? '% of base' : '' },
+    { span: showConversion ? stageKeys.length - 1 : 0, label: showConversion ? 'Conversion (prev. stage)' : '' },
+    { span: showBreakdown ? breakdownKeys.length : 0, label: showBreakdown ? 'Traffic breakdown' : '' },
+    { span: showProfile ? profileKeys.length : 0, label: showProfile ? 'Profile metrics' : '' },
+    { span: showStatus ? statusCols.length : 0, label: showStatus ? 'Account status' : '' },
+  ];
+  theadGroup.innerHTML = groups.map(g => g.span ? `<th colspan="${g.span}">${escapeHtml(g.label)}</th>` : '').join('');
+
+  thead.innerHTML = '<th>Card</th>' +
+    stageKeys.map(k => `<th>${escapeHtml(k.label)}<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') +
+    (showPctBase ? stageKeys.slice(1).map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
+    (showConversion ? stageKeys.slice(1).map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">of prior stage</span></th>`).join('') : '') +
+    (showBreakdown ? breakdownKeys.map(k => `<th>${escapeHtml(k.label)} %<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
+    (showProfile ? profileKeys.map(k => `<th>${escapeHtml(k.label)}<br><span style="font-weight:400;">${escapeHtml(periodLabel(k.period))}</span></th>`).join('') : '') +
+    (showStatus ? statusCols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') : '');
+
+  tbody.innerHTML = '';
+  const pctVals = {}; stageKeys.slice(1).forEach(k => pctVals[k.key] = []);
+  const convVals = {}; stageKeys.slice(1).forEach(k => convVals[k.key] = []);
+  const bdVals = {}; breakdownKeys.forEach(k => bdVals[k.key] = []);
+  const pmVals = {}; profileKeys.forEach(k => pmVals[k.key] = []);
+  const stVals = {}; stageKeys.forEach(k => stVals[k.key] = []);
+  const statVals = {}; statusCols.forEach(c => statVals[c.key] = []);
+
+  rows.forEach(e => {
+    const stageByLabel = {}; e.stages.forEach(s => stageByLabel[s.label] = s.value);
+    const bdByLabel = {}; e.breakdown.forEach(b => bdByLabel[b.label] = b.percent);
+    const pmByLabel = {}; e.profileMetrics.forEach(m => pmByLabel[m.label] = m.value);
+    const baseVal = e.stages[0]?.value ?? null;
+
+    const meta = [
+      e.source ? `<span class="source">${escapeHtml(e.source)}</span>` : '',
+      countryOf(e) ? `<span class="loc">📍 ${escapeHtml([e.location.city, e.location.region, e.location.country].filter(Boolean).join(', '))}</span>` : ''
+    ].filter(Boolean).join('');
+
+    let cells = `<td><span class="rowname"><button class="rm" data-remove="${e.id}">×</button><span class="cardmeta"><span>${escapeHtml(e.title)}</span>${meta}</span></span></td>`;
+
+    stageKeys.forEach(k => {
+      const v = (e.funnelPeriod === k.period) ? stageByLabel[k.label] : undefined;
+      if (v !== undefined) stVals[k.key].push(v);
+      cells += `<td>${v === undefined ? '—' : v}</td>`;
+    });
+    if (showPctBase) stageKeys.slice(1).forEach(k => {
+      const v = (e.funnelPeriod === k.period) ? stageByLabel[k.label] : undefined;
+      if (v === undefined || !baseVal) { cells += '<td>—</td>'; return; }
+      const pct = (v / baseVal) * 100;
+      pctVals[k.key].push(pct);
+      const barPct = Math.min(100, pct);
+      cells += `<td><span class="barcell"><span class="mini-bar"><span style="width:${barPct}%"></span></span>${pct.toFixed(1)}%</span></td>`;
+    });
+    if (showConversion) stageKeys.slice(1).forEach(k => {
+      const idx = e.stages.findIndex(s => s.label === k.label);
+      const inPeriod = e.funnelPeriod === k.period;
+      const v = (inPeriod && idx > 0) ? e.stages[idx].value : undefined;
+      const prevVal = (inPeriod && idx > 0) ? e.stages[idx - 1].value : undefined;
+      if (v === undefined || !prevVal) { cells += '<td>—</td>'; return; }
+      const conv = (v / prevVal) * 100;
+      convVals[k.key].push(conv);
+      cells += `<td>${conv.toFixed(1)}%</td>`;
+    });
+    if (showBreakdown) breakdownKeys.forEach(k => {
+      const v = (e.funnelPeriod === k.period) ? bdByLabel[k.label] : undefined;
+      if (v !== undefined) bdVals[k.key].push(v);
+      cells += `<td>${v === undefined ? '—' : v.toFixed(1) + '%'}</td>`;
+    });
+    if (showProfile) profileKeys.forEach(k => {
+      const v = (e.profilePeriod === k.period) ? pmByLabel[k.label] : undefined;
+      if (v !== undefined) pmVals[k.key].push(v);
+      cells += `<td>${v === undefined ? '—' : v}</td>`;
+    });
+    if (showStatus) statusCols.forEach(c => {
+      const v = e.status[c.key];
+      if (v !== null && v !== undefined) statVals[c.key].push(c.kind === 'bool' ? (v ? 1 : 0) : v);
+      if (c.kind === 'bool') {
+        cells += `<td>${v === null || v === undefined ? '—' : `<span class="badge ${v ? 'has' : ''}"><span class="bdot"></span>${v ? 'Yes' : 'No'}</span>`}</td>`;
+      } else if (c.kind === 'usd') {
+        cells += `<td>${v === null || v === undefined ? '—' : '$' + Number(v).toLocaleString()}</td>`;
+      } else if (c.kind === 'pct') {
+        cells += `<td>${v === null || v === undefined ? '—' : v + '%'}</td>`;
+      } else {
+        cells += `<td>${v === null || v === undefined ? '—' : v}</td>`;
+      }
+    });
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => removeEntry(Number(btn.dataset.remove)));
+  });
+
+  let footCells = `<td>Average (${rows.length} of ${entries.length} card${entries.length > 1 ? 's' : ''})</td>`;
+  stageKeys.forEach(k => {
+    const a = avg(stVals[k.key]);
+    footCells += `<td>${a === null ? '—' : a.toFixed(1)}</td>`;
+  });
+  if (showPctBase) stageKeys.slice(1).forEach(k => {
+    const a = avg(pctVals[k.key]);
+    footCells += `<td>${a === null ? '—' : a.toFixed(1) + '%'}</td>`;
+  });
+  if (showConversion) stageKeys.slice(1).forEach(k => {
+    const a = avg(convVals[k.key]);
+    footCells += `<td>${a === null ? '—' : a.toFixed(1) + '%'}</td>`;
+  });
+  if (showBreakdown) breakdownKeys.forEach(k => {
+    const a = avg(bdVals[k.key]);
+    footCells += `<td>${a === null ? '—' : a.toFixed(1) + '%'}</td>`;
+  });
+  if (showProfile) profileKeys.forEach(k => {
+    const a = avg(pmVals[k.key]);
+    footCells += `<td>${a === null ? '—' : a.toFixed(1)}</td>`;
+  });
+  if (showStatus) statusCols.forEach(c => {
+    const a = avg(statVals[c.key]);
+    if (a === null) { footCells += '<td>—</td>'; return; }
+    if (c.kind === 'bool') footCells += `<td>${(a * 100).toFixed(0)}%</td>`;
+    else if (c.kind === 'usd') footCells += `<td>$${a.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>`;
+    else if (c.kind === 'pct') footCells += `<td>${a.toFixed(1)}%</td>`;
+    else footCells += `<td>${a.toFixed(1)}</td>`;
+  });
+  tfoot.innerHTML = footCells;
+}
+
+renderTable();
+</script>
+</body>
+</html>

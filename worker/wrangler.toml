@@ -1,0 +1,12 @@
+name = "funnel-reader"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "funnel-reader-db"
+database_id = "6aba8c4c-fb7f-47d2-b1e6-b499b3715ad5"
